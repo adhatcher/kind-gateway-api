@@ -1,0 +1,55 @@
+---
+version: '3'
+
+vars:
+  CLUSTER_NAME: gwkc-1
+  GATEWAY_NS: gateway
+  DEPENDENCIES:
+    - docker
+    - kind
+    - kubectl
+
+check-docker-running: &check-docker-running |
+  docker info > /dev/null 2>&1
+
+check-cluster-running: &check-cluster-running |
+  kind get clusters | grep {{.CLUSTER_NAME}}
+
+check-cloud-provider-kind-running: &check-cloud-provider-kind-running |
+  pgrep sudo cloud-provider-kind
+
+tasks:
+  default:
+    aliases: [all, make]
+    deps:
+      - check-dependencies
+      - create-cluster
+
+  check-dependencies:
+    silent: true
+    cmds:
+      - |
+        {{range .DEPENDENCIES}}
+          if ! command -v {{.}} > /dev/null; then
+            echo "{{.}} not found"
+          fi
+        {{end}}
+
+  create-cluster:
+    run: once
+    preconditions:
+      - *check-docker-running
+    cmds:
+      - kind create cluster --config=./kind-config.yml
+    status:
+      - *check-cluster-running
+
+  clean-cluster:
+    cmds:
+      - kind delete cluster --name {{.CLUSTER_NAME}}
+
+  clean:
+    aliases: [delete]
+    ignore_error: true
+    cmds:
+      - task: clean-cluster
