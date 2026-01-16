@@ -29,7 +29,7 @@ tasks:
       - run-cloud-provider-kind
       - deploy-gateway
       - deploy-app
-      - update-etc-hosts
+      #- update-etc-hosts
       - open-app
 
   check-dependencies:
@@ -148,4 +148,4 @@ tasks:
       - task: clean-gateway
       - task: clean-cluster
       - task: clean-cloud-provider-kind
-      - task: clean-etc-hosts
+     # - task: clean-etc-hosts
