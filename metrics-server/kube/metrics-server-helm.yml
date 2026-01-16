@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: metrics-server-helm
+  namespace: argocd
+spec:
+  destination:
+    namespace: kube-system
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: 
+        https://kubernetes-sigs.github.io/metrics-server/
+    chart: metrics-server
+    targetRevision: 0.8.x # Use the latest stable version (e.g., v3.12.0)
+    helm:
+      values: |
+        args:
+          - --kubelet-insecure-tls # Use this flag if you don't have proper TlS certificates configured for Kubelet
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
