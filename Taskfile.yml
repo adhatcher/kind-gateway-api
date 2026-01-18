@@ -58,7 +58,7 @@ tasks:
   deploy-lb:
     run: once
     deps:
-      - create-cluster
+      - deploy-cluster
     interactive: true
     cmds:
       - sudo -v
@@ -76,7 +76,7 @@ tasks:
   deploy-gateway:
     run: once
     deps:
-      - run-cloud-provider-kind
+      - deploy-lb
     cmds:
       - sleep 10  # wait for cloud-provider-kind to be ready
       - kubectl apply -f ./2-gateway-api/gateway.yml
