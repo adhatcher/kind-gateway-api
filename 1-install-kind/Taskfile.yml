@@ -3,7 +3,6 @@ version: '3'
 
 vars:
   CLUSTER_NAME: gwkc-1
-  GATEWAY_NS: gateway
   DEPENDENCIES:
     - docker
     - kind
@@ -15,16 +14,14 @@ check-docker-running: &check-docker-running |
 check-cluster-running: &check-cluster-running |
   kind get clusters | grep {{.CLUSTER_NAME}}
 
-check-cloud-provider-kind-running: &check-cloud-provider-kind-running |
-  pgrep sudo cloud-provider-kind
 
 tasks:
   default:
     aliases: [all, make]
     deps:
       - check-dependencies
-      - create-cluster
-
+      - deploy-cluster
+      
   check-dependencies:
     silent: true
     cmds:
@@ -35,12 +32,12 @@ tasks:
           fi
         {{end}}
 
-  create-cluster:
+  deploy-cluster:
     run: once
     preconditions:
       - *check-docker-running
     cmds:
-      - kind create cluster --config=./kind-config.yml
+      - kind create cluster --config=./1-install-kind/kind-config.yml
     status:
       - *check-cluster-running
 

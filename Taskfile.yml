@@ -26,7 +26,6 @@ tasks:
       - check-dependencies
       - deploy-cluster
       - deploy-lb
-      - deploy-metrics-server
       - deploy-gateway
       - deploy-app
       #- update-etc-hosts

@@ -49,6 +49,7 @@ spec:
   parentRefs:
     - name: gateway
       namespace: gateway
+      sectionName: http
   hostnames:
     - "kind.local"
   rules:
