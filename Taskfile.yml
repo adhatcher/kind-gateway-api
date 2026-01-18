@@ -24,9 +24,8 @@ tasks:
     aliases: [all, make]
     deps:
       - check-dependencies
-      - create-cluster
-      #- label-nodes
-      - deploy-cloud-provider-kind
+      - deploy-cluster
+      - deploy-lb
       - deploy-metrics-server
       - deploy-gateway
       - deploy-app
@@ -43,7 +42,7 @@ tasks:
           fi
         {{end}}
 
-  create-cluster:
+  deploy-cluster:
     run: once
     preconditions:
       - *check-docker-running
@@ -52,17 +51,12 @@ tasks:
     status:
       - *check-cluster-running
 
-  label-nodes:
-    run: once
-    deps:
-      - create-cluster
+  clean-cluster:
     cmds:
-      - |
-        for node in $(kubectl get nodes -o name | grep "{{.CLUSTER_NAME}}-worker" | sed 's/.*\///'); do
-          kubectl label nodes $node node-role.kubernetes.io/worker=
-        done
+      - kind delete cluster --name {{.CLUSTER_NAME}}
 
-  deploy-cloud-provider-kind:
+
+  deploy-lb:
     run: once
     deps:
       - create-cluster
@@ -72,6 +66,13 @@ tasks:
       - sh -c 'nohup sudo cloud-provider-kind --gateway-channel standard >/dev/null 2>&1 &'  # yamllint disable-line rule:line-length
     status:
       - *check-cloud-provider-kind-running
+
+  clean-lb:
+    interactive: true
+    cmds:
+      - *check-cloud-provider-kind-running
+      - sudo -v
+      - sudo pkill cloud-provider-kind
 
   deploy-gateway:
     run: once
@@ -118,29 +119,18 @@ tasks:
       LOAD_BALANCER_IP:
         sh: kubectl get gateway gateway -n {{.GATEWAY_NS}} | awk '{print $3}' | awk NR==2  # yamllint disable-line rule:line-length
 
+  clean-etc-hosts:
+    cmds:
+      - sudo -v
+      - sudo sed -i '' '/kind\.local/d' /etc/hosts
+      - echo "Removed all lines containing 'kind.local' from /etc/hosts"
+ 
   open-app:
     deps:
       - deploy-app
       - update-etc-hosts
     cmds:
       - open http://kind.local
-
-  clean-cloud-provider-kind:
-    interactive: true
-    cmds:
-      - *check-cloud-provider-kind-running
-      - sudo -v
-      - sudo pkill cloud-provider-kind
-
-  clean-cluster:
-    cmds:
-      - kind delete cluster --name {{.CLUSTER_NAME}}
-
-  clean-etc-hosts:
-    cmds:
-      - sudo -v
-      - sudo sed -i '' '/kind\.local/d' /etc/hosts
-      - echo "Removed all lines containing 'kind.local' from /etc/hosts"
 
   clean:
     aliases: [delete]
@@ -149,5 +139,5 @@ tasks:
       - task: clean-app
       - task: clean-gateway
       - task: clean-cluster
-      - task: clean-cloud-provider-kind
+      - task: clean-lb
      # - task: clean-etc-hosts

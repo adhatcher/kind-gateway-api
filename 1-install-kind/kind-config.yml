@@ -1,6 +1,6 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-name: gwkc-1
+
 nodes:
 - role: control-plane
   extraPortMappings:
@@ -27,14 +27,14 @@ nodes:
       kubeletExtraArgs:
         node-labels: "node-role.kubernetes.io/worker=true"
 - role: worker
-    kubeadmConfigPatches:
+  kubeadmConfigPatches:
   - |
     kind: InitConfiguration
     nodeRegistration:
       kubeletExtraArgs:
         node-labels: "node-role.kubernetes.io/worker=true"
 - role: worker
-    kubeadmConfigPatches:
+  kubeadmConfigPatches:
   - |
     kind: InitConfiguration
     nodeRegistration:
