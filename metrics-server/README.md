@@ -7,58 +7,44 @@ This method is often preferred for managing configurations like TLS settings or 
 First, ensure Argo CD is aware of the Helm chart repository. You can do this via the UI in **Settings > Repositories** or using the CLI:
 
 ```bash
-argocd repo add
+argocd repo add https://kubernetes-sigs.github.io/metrics-server/ --name metrics-server-helm
 ```
 
-```bash
-https://kubernetes-sigs.github.io/metrics-server/
-```
-
-```bash
- --name metrics-server-helm
-```
+![metrics-server-repo](./images/metrics-server-repo.png)
 
 ## Create an Argo CD Application manifest
 
-Define the Application resource, specifying the Helm chart details.
+Define the Application in ArgoCD by applying the `kube\metrics-server-helm.yml` file. This chart is passing the `--kubelet-insecure-tls=true` parameter since there is no cert on this cluster.
 
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: metrics-server-helm
-  namespace: argocd
-spec:
-  destination:
-    namespace: kube-system
-    server: https://kubernetes.default.svc
-  source:
-    repoURL: 
-        https://kubernetes-sigs.github.io/metrics-server/
-
-    chart: metrics-server
-    targetRevision: v3.x.x # Use the latest stable version (e.g., v3.12.0)
-    helm:
-      values: |
-        args:
-          - --kubelet-insecure-tls # Use this flag if you don't have proper TlS certificates configured for Kubelet
-  project: default
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+```bash
+kubectl apply -f kube\metrics-server-heml.yml
+application.argoproj.io/metrics-server-helm created
 ```
 
-## Apply the Argo CD Application and monitor the sync process as described in Method 1.
+![metrics-server-app](./images/metrics-server-app.png)
 
-## Verification
 
 Once installed and synced, the Metrics Server pod should be running and healthy in the `kube-system` namespace. You can verify the installation by checking node and pod metrics:
 
 ```bash
-kubectl get pods -n kube-system | grep metrics-server
-kubectl top nodes
-kubectl top pods --all-namespaces
+% kubectl get pods -n kube-system | grep metrics-server
+
+metrics-server-helm-6495b8f7bc-4v946           1/1     Running   0          10m
+
+% kubectl top nodes
+NAME                   CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+gwkc-1-control-plane   186m         2%       1756Mi          22%         
+gwkc-1-worker          60m          0%       1143Mi          14%         
+gwkc-1-worker2         40m          0%       961Mi           12%         
+gwkc-1-worker3         47m          0%       1263Mi          16%         
+
+% kubectl top pods -n phrases
+NAME                       CPU(cores)   MEMORY(bytes)   
+backend-7cf7b4bc6b-dj6jd   5m           58Mi            
+backend-7cf7b4bc6b-hc6pn   3m           51Mi            
+frontend-6444c965d-cm6tc   6m           56Mi            
+frontend-6444c965d-pm69c   6m           58Mi            
+frontend-6444c965d-w958j   5m           57Mi   
 ```
 
 If these commands return CPU and memory usage data, the Metrics Server is installed and functioning correctly.

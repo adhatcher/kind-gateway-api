@@ -4,19 +4,26 @@ metadata:
   name: metrics-server-helm
   namespace: argocd
 spec:
-  destination:
-    namespace: kube-system
-    server: https://kubernetes.default.svc
+  project: default
   source:
-    repoURL: 
-        https://kubernetes-sigs.github.io/metrics-server/
-    chart: metrics-server
-    targetRevision: 0.8.x # Use the latest stable version (e.g., v3.12.0)
+    # Use the official source repository for metrics-server manifest definitions
+    repoURL: https://github.com/kubernetes-sigs/metrics-server
+    targetRevision: HEAD # Or a specific commit/tag if preferred
+    path: charts/metrics-server # Points to the root of the Helm chart definition
+
+    # --- Helm Specific Configuration ---
     helm:
+      # Override values directly to add the insecure-tls flag
       values: |
         args:
-          - --kubelet-insecure-tls # Use this flag if you don't have proper TlS certificates configured for Kubelet
-  project: default
+          - --kubelet-insecure-tls=true
+          # You might need other default args to be present, depending on the chart version
+          # The official chart handles defaults, so we just add our required one.
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system # metrics-server usually runs here
+
   syncPolicy:
     automated:
       prune: true
