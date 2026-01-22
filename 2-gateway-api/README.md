@@ -8,53 +8,7 @@
 
 This contains instructions for installing a loadbalancer called `cloud-provider-kind` on your `kind` cluster built using the instructions found in [step 1](https://github.com/adhatcher/kind-gateway-api/tree/main/1-install-kind/). This will allow you to access the ingress without the need to manually forward ports to your mac.
 
-## Setting up `cloud-provider-kind` as a docker process
-
-### Build Steps
-
-Clone the repository: Use Git to clone the cloud-provider-kind repository from GitHub.
-
-```bash
-git clone https://github.com/kubernetes-sigs/cloud-provider-kind.git
-```
-
-Navigate to the directory: Change your current directory to the newly cloned repository folder.
-
-```bash
-cd cloud-provider-kind
-```
-
-Build the Docker image: Run the `docker build` command in the repository's root directory to create the container image, tagging it for easy reference (e.g., cloud-provider-kind).
-
-```bash
-docker build . -t cloud-provider-kind:v1
-```
-
-Verify the image (Optional): Confirm that the image was successfully built and is listed in your local Docker images.
-
-```bash
-docker images cloud-provider-kind
-```
-
-### Running the Container
-
-Once built, you can run the cloud-provider-kind container. The process requires mounting the host's Docker socket into the container so it can provision the necessary load balancer containers within your kind cluster's environment.
-Using the host network: This is often the simplest approach for local development.
-
-```bash
-docker run --rm --network host -v /var/run/docker.sock:/var/run/docker.sock --name cloud-provider-kind -d  cloud-provider-kind:v1 --enable-lb-port-mapping
-```
-
-You should see 2 containers running, the cloud-provider-kind:v1 container and an envoyproxy/envoy container (if you have already created a gatewayclass. If you have not created a gatewayclass yet, once you create the gatewayclass, you should see an envoyproxy container get created, exporting the ports you defined in the gatewayclass.). Make sure the envoy proxy container is exporting the ports you have configured in the gatewayclass you created.
-
-```bash
-docker ps
-CONTAINER ID   IMAGE                      COMMAND                  CREATED         STATUS         PORTS                                                                                                                                     NAMES
-ea804a6eb82a   envoyproxy/envoy:v1.33.2   "/docker-entrypoint.…"   2 minutes ago   Up 2 minutes   0.0.0.0:54063->80/tcp, [::]:54063->80/tcp, 0.0.0.0:54064->443/tcp, [::]:54064->443/tcp, 0.0.0.0:55056->10000/tcp, [::]:55056->10000/tcp   kindccm-gw-a73b0c99571a
-7de1084bf28e   cloud-provider-kind        "/bin/cloud-provider…"   2 minutes ago   Up 2 minutes                                                                                                                                             cloud-provider-kind
-```
-
-### Setting up `cloud-provider-kind` via background process
+### Setting up `cloud-provider-kind`
 
 `cloud-provider-kind` allows you to use a [Kubernetes Gateway](https://kubernetes.io/docs/concepts/services-networking/gateway/#api-kind-gateway) resource and get an assignable IP address
 
@@ -91,7 +45,7 @@ cloud-provider-kind   kind.sigs.k8s.io/gateway-controller   True       5m1s
 
 ### Deploying the Gateway Resource
 
-Create a file called `gateway.yaml` with the following contents:
+I will create a file called `gateway.yaml` with the following contents:
 
 ```yaml
 ---
