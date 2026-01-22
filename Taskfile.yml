@@ -17,7 +17,7 @@ check-cluster-running: &check-cluster-running |
   kind get clusters | grep {{.CLUSTER_NAME}}
 
 check-cloud-provider-kind-running: &check-cloud-provider-kind-running |
-  pgrep sudo cloud-provider-kind
+  docker ps -f name=cloud-provider-kind | grep cloud-provider-kind
 
 tasks:
   default:
@@ -62,8 +62,8 @@ tasks:
       - deploy-cluster
     interactive: true
     cmds:
-      - sudo -v
-      - sh -c 'nohup sudo cloud-provider-kind --gateway-channel standard >/dev/null 2>&1 &'  # yamllint disable-line rule:line-length
+      - |
+        docker run --rm --network host -v /var/run/docker.sock:/var/run/docker.sock --name cloud-provider-kind -d  cloud-provider-kind:v1 --enable-lb-port-mapping
     status:
       - *check-cloud-provider-kind-running
 

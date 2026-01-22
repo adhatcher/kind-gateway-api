@@ -52,7 +52,7 @@ spec:
       sectionName: http
       kind: Gateway
   hostnames:
-    - "kind.local"
+    - "kind.docker"
   rules:
     - backendRefs:
         - name: http-echo-service
