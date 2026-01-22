@@ -50,12 +50,9 @@ spec:
     - name: gateway
       namespace: gateway
       sectionName: http
-      kind: Gateway
   hostnames:
     - "kind.docker"
   rules:
     - backendRefs:
         - name: http-echo-service
           port: 80
-          namespace: app
-          kind: Service

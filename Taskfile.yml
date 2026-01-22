@@ -26,7 +26,6 @@ tasks:
       - check-dependencies
       - deploy-cluster
       - deploy-lb
-      #- deploy-crds # This is already done when deploy-lb is run.
       - deploy-gateway
       - deploy-app
       #- update-etc-hosts
@@ -74,19 +73,6 @@ tasks:
       - sudo -v
       - sudo pkill cloud-provider-kind
 
-  deploy-crds:
-    run: once
-    deps:
-      - deploy-lb
-    cmds:
-      - kubectl create -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/standard-install.yaml
-    status:
-      - kubectl get crds|grep gateway
-
-  clean_crds:
-    cmds:
-      - kubectl delete -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/standard-install.yaml
-  
   deploy-gateway:
     run: once
     deps:
@@ -96,7 +82,7 @@ tasks:
       - kubectl apply -f ./2-gateway-api/gateway.yml
       - kubectl wait gateway/gateway -n {{.GATEWAY_NS}} --for jsonpath='{.status.addresses[0].value}' 
     status:
-      - kubectl get gateway/gateway -n {{.GATEWAY_NS}} -o jsonpath='{.status.addresses[0].value}'
+      - kubectl diff -f ./2-gateway-api/gateway.yml
 
   clean-gateway:
     cmds:
@@ -120,7 +106,7 @@ tasks:
     run: once
     prompt: Do you want to update /etc/hosts ?
     deps:
-      - deploy-gateway
+      - deploy-app
     cmds:
       - kubectl wait gateway/gateway -n {{.GATEWAY_NS}} --for jsonpath='{.status.addresses[0].value}'
       - echo {{.LOAD_BALANCER_IP}}
@@ -130,8 +116,7 @@ tasks:
       - cat /etc/hosts | grep {{.LOAD_BALANCER_IP}}
     vars:
       LOAD_BALANCER_IP:
-        |
-        kubectl get gateway gateway -n {{.GATEWAY_NS}} | awk '{print $3}' | awk NR==2  # yamllint disable-line rule:line-length
+        sh: kubectl get gateway gateway -n {{.GATEWAY_NS}} | awk '{print $3}' | awk NR==2  # yamllint disable-line rule:line-length
 
   clean-etc-hosts:
     cmds:
@@ -151,7 +136,6 @@ tasks:
     ignore_error: true
     cmds:
       - task: clean-app
-      - task: clean_crds
       - task: clean-gateway
       - task: clean-cluster
       - task: clean-lb

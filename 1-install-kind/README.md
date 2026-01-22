@@ -19,7 +19,7 @@ and the documentation here:
 Cloud Provider Kind loadbalancer:
 
 - [https://kind.sigs.k8s.io/docs/user/loadbalancer/](https://kind.sigs.k8s.io/docs/user/loadbalancer/)
-- [https://github.com/kubernetes-sigs/cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind)]
+- [https://github.com/kubernetes-sigs/cloud-provider-kind(https://github.com/kubernetes-sigs/cloud-provider-kind)]
 
 ## Prerequisites
 
