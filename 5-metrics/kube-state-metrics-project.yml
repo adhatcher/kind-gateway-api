@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: kube-state-metrics-project
+  namespace: argocd
+spec:
+  description: Project for kube-state-metrics app
+  sourceRepos:
+  - 'https://prometheus-community.github.io/helm-charts'
+  destinations:
+  - server: 'https://kubernetes.default.svc'
+    namespace: 'kube-system'
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'

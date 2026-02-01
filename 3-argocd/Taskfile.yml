@@ -1,0 +1,135 @@
+---
+version: '3'
+
+vars:
+  CLUSTER_NAME: zeus
+  DEPENDENCIES:
+    - docker
+    - kind
+    - cloud-provider-kind
+    - kubectl
+
+
+
+tasks:
+  check-docker-running:
+    cmds:
+      - docker info > /dev/null 2>&1
+
+  # check-cluster-running:
+  #   cmds:
+  #     - kind get clusters | grep {{.CLUSTER_NAME}}
+
+  check-cloud-provider-kind-running:
+    cmds:
+      - pgrep sudo cloud-provider-kind
+
+  default:
+    aliases: [all, make]
+    deps:
+      - check-dependencies
+      #- update-gateway
+      - create-namespace
+      - install-sample-app
+      - disable-tls
+      - restart-deployment
+      - configure-httproute
+      - get-password
+      - open-app
+
+  check-dependencies:
+    silent: true
+    cmds:
+      - |
+        {{range .DEPENDENCIES}}
+          if ! command -v {{.}} > /dev/null; then
+            echo "{{.}} not found"
+          fi
+        {{end}}
+
+  create-namespace:
+    run: once
+    # deps:
+    #   - check-cluster-running
+    cmds:
+      - kubectl create namespace argocd || echo "namespace argocd already exists"
+    status:
+      - kubectl get namespace argocd
+
+  clean-namespace:
+    cmds:
+      - kubectl delete namespace argocd
+
+  install-sample-app:
+    run: once
+    deps:
+      - check-docker-running
+      #- check-cluster-running
+      - check-cloud-provider-kind-running
+    cmds:
+      - kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    status:
+      - kubectl wait --for=condition=ready deployment argocd-server -n argocd
+    silent: true
+
+  disable-tls:
+    run: once
+    deps:
+      - install-sample-app
+    cmds:
+      -   kubectl patch configmap argocd-cmd-params-cm -n argocd -p '{"data":{"server.insecure":"true","server.rootpath":"/argocd/", "server.basehref":"/argocd/"}}'
+      #-   kubectl --namespace argocd rollout restart deployment argocd-server
+    #status:
+      #- kubectl wait --for=condition=available --timeout=120s deployment/argocd-server -n argocd
+
+  restart-deployment:
+    deps:
+      - disable-tls
+    cmds:
+      - |
+        kubectl --namespace argocd rollout restart deployment argocd-server
+    status:
+      - |
+        kubectl wait --for=condition=ready pod --all -n argocd --timeout=120s
+  
+  clean-app:
+    cmds:
+      - kubectl delete namespace argocd
+  
+
+  configure-httproute:
+    deps:
+      - disable-tls
+    cmds:
+      - kubectl apply -f httproute.yml
+    status:
+      - kubectl diff -f httproute.yml
+  
+  clean-httproute:
+    cmds:
+      - kubectl delete -f httproute.yml
+
+  get-password:
+    # deps:
+    #   - install-sample-app
+    cmds:
+      - |
+        echo "Password is: " {{.PASSWORD}}
+    vars:
+      PASSWORD:
+        sh: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 --decode 
+  
+  open-app:
+    deps:
+      - configure-httproute
+    cmds:
+      - open http://argocd.local
+  
+  clean:
+    aliases: [delete]
+    ignore_error: true
+    cmds:
+      - task: clean-httproute
+      - task: clean-app
+      
+    

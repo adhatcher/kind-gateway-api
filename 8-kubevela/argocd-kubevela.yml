@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubevela
+  namespace: argocd # Use the namespace where ArgoCD is installed
+spec:
+  project: default
+  source:
+    # Corresponds to 'helm repo add kubevela https://kubevela.github.io/charts'
+    repoURL: https://kubevela.github.io/charts
+    chart: vela-core
+    targetRevision: "*" # Use a specific chart version for production
+  destination:
+    # Corresponds to '-n vela-system' (namespace must be pre-created)
+    server: https://kubernetes.default.svc
+    namespace: vela-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # Corresponds to '--create-namespace' and part of '--wait' functionality
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+      - ApplyOutOfSyncOnly=true
+    # The 'helm install --wait' behavior is handled by ArgoCD's default health checks and sync status

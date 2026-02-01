@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: otel-project
+  namespace: argocd
+spec:
+  description: Project for otel app
+  sourceRepos:
+  - 'https://open-telemetry.github.io/opentelemetry-helm-charts'
+  destinations:
+  - server: 'https://kubernetes.default.svc'
+    namespace: 'observability'
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'

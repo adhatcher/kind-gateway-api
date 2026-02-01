@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cert-manager-project
+  namespace: argocd
+spec:
+  description: Project for prometheus app
+  sourceRepos:
+  - 'https://charts.jetstack.io'
+  destinations:
+  - server: 'https://kubernetes.default.svc'
+    namespace: 'cert-manager'
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'

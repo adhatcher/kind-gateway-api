@@ -1,36 +1,57 @@
----
+# Taskfile.yaml
+
 version: '3'
 
 vars:
-  CLUSTER_NAME: gwkc-1
+  CLUSTER_NAME: zeus
   GATEWAY_NS: gateway
+  argo_helm_repo_url: "https://argoproj.github.io/argo-helm"
+  argo_release_name: argocd
+  argo_chart_name: argo/argo-cd
+  version: "v2.26.1" # Replace with your desired version
   DEPENDENCIES:
     - docker
     - kind
     - cloud-provider-kind
     - kubectl
+    - helm
 
-check-docker-running: &check-docker-running |
-  docker info > /dev/null 2>&1
+  check-docker-running: &check-docker-running |
+    docker info > /dev/null 2>&1
 
-check-cluster-running: &check-cluster-running |
-  kind get clusters | grep {{.CLUSTER_NAME}}
+  check-cluster-running: &check-cluster-running |
+    kind get clusters | grep {{.CLUSTER_NAME}}
 
-check-cloud-provider-kind-running: &check-cloud-provider-kind-running |
-  pgrep sudo cloud-provider-kind
+  check-cloud-provider-kind-running: &check-cloud-provider-kind-running |
+    pgrep sudo cloud-provider-kind
 
 tasks:
+
   default:
-    aliases: [all, make]
+    aliases: [deploy, all, make]
     deps:
       - check-dependencies
-      - deploy-cluster
-      - deploy-lb
-      #- deploy-crds # This is already done when deploy-lb is run.
-      - deploy-gateway
-      - deploy-app
-      #- update-etc-hosts
-      - open-app
+      - create-cluster
+      #- sync-context
+      - install-cpk-lb
+      - deploy-crds
+      - deploy-argocd
+      - deploy-kgateway
+      - create-gateway
+      - update-etc-hosts
+      - get-argocd-password
+      - open-argocd-ui
+      - install-cert-manager
+      - install-metrics-server
+      - install-monitoring
+      - install-otel
+      - install-fluxcd
+      - install-vela
+      - install-velaux
+      - install-vela-fluxcd
+      - install-vela-app
+
+
 
   check-dependencies:
     silent: true
@@ -42,12 +63,12 @@ tasks:
           fi
         {{end}}
 
-  deploy-cluster:
+  create-cluster:
     run: once
     preconditions:
       - *check-docker-running
     cmds:
-      - kind create cluster --config=./1-install-kind/kind-config.yml
+      - kind create cluster --config=./1-install-kind/kind-config.yml --name {{.CLUSTER_NAME}}
     status:
       - *check-cluster-running
 
@@ -55,17 +76,27 @@ tasks:
     cmds:
       - kind delete cluster --name {{.CLUSTER_NAME}}
 
+  # sync-context:
+  #   desc: Update kubeconfig with the current KinD port
+  #   deps:
+  #     - create-cluster
+  #   preconditions:
+  #     - *check-cluster-running
+  #   cmds:
+  #     - kind export kubeconfig --name {{.CLUSTER_NAME}}
 
-  deploy-lb:
+  install-cpk-lb:
     run: once
     deps:
-      - deploy-cluster
+      - create-cluster
+    preconditions:
+      - *check-cluster-running
     interactive: true
     cmds:
       - sudo -v
       - sh -c 'nohup sudo cloud-provider-kind --gateway-channel standard >/dev/null 2>&1 &'  # yamllint disable-line rule:line-length
     status:
-      - *check-cloud-provider-kind-running
+      - ps -ef|grep cloud-provider-kind | grep -v grep
 
   clean-lb:
     interactive: true
@@ -76,8 +107,11 @@ tasks:
 
   deploy-crds:
     run: once
+    desc: Install CRDs
     deps:
-      - deploy-lb
+      - install-cpk-lb
+    preconditions:
+      - ps -ef|grep cloud-provider-kind
     cmds:
       - kubectl create -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/standard-install.yaml
     status:
@@ -86,73 +120,297 @@ tasks:
   clean_crds:
     cmds:
       - kubectl delete -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/standard-install.yaml
+       
+  deploy-argocd:
+    desc: Install argocd
+    run: once
+    deps:
+      - deploy-crds
+    preconditions: 
+      - kubectl get crds|grep gateway
+    cmds:
+      - helm repo add argo https://argoproj.github.io/argo-helm
+      - helm repo update
+      - |
+        helm upgrade --install argocd argo/argo-cd \
+          --namespace argocd \
+          --create-namespace \
+          --set configs.params."server\.insecure"=true \
+          --set server.ingress.enabled=false \
+          --set server.httproute.enabled=true \
+          --set server.httproute.hostnames[0]=argocd.local \
+          --set server.httproute.parentRefs[0].name=gateway \
+          --set server.httproute.parentRefs[0].namespace=gateway
+    status:
+      - kubectl wait deployment argocd-server --for=condition=available --timeout=60s -n argocd
   
-  deploy-gateway:
+  clean-argoCD:
+    cmds:
+      - kubectl delete ns argocd
+
+  deploy-kgateway:
+    desc: Install Kgateway
     run: once
     deps:
-      - deploy-lb
+      - deploy-argocd
+    preconditions:
+      - kubectl wait deployment argocd-server --for=condition=available --timeout=60s -n argocd
     cmds:
-      - sleep 10  # wait for cloud-provider-kind to be ready
-      - kubectl apply -f ./2-gateway-api/gateway.yml
-      - kubectl wait gateway/gateway -n {{.GATEWAY_NS}} --for jsonpath='{.status.addresses[0].value}' 
+      - kubectl apply -f 10-kgateway/argocd-kgateway-crds.yml
+      - kubectl apply -f 10-kgateway/argocd-kgateway-helm.yml
+      - kubectl apply -f 10-kgateway/kgateway-gateway.yml
+      - sleep 120
     status:
-      - kubectl get gateway/gateway -n {{.GATEWAY_NS}} -o jsonpath='{.status.addresses[0].value}'
+      - kubectl wait deployment/gateway --for=condition=available -n gateway
 
+  clean-kgateway:
+    cmds:
+      - kubectl delete -f 10-kgateway/argocd-kgateway-crds.yml
+      - kubectl delete -f 10-kgateway/argocd-kgateway-helm.yml
+      - kubectl delete -f 10-kgateway/kgateway-gateway.yml
+
+
+  create-gateway:
+      run: once
+      deps:
+        - deploy-kgateway
+      preconditions:
+        - kubectl wait deployment/gateway --for=condition=available --timeout=60s -n gateway
+      cmds:
+        - sleep 10  # wait for cloud-provider-kind to be ready
+        - kubectl apply -f ./10-kgateway/kgateway-gateway.yml
+        - kubectl wait gateway/gateway -n {{.GATEWAY_NS}} --for jsonpath='{.status.addresses[0].value}' 
+      status:
+        - kubectl wait gateway/gateway -n {{.GATEWAY_NS}} --for jsonpath='{.status.addresses[0].value}' 
+
+  
   clean-gateway:
-    cmds:
-      - kubectl delete -f ./2-gateway-api/app.yml
-
-
-  deploy-app:
-    run: once
-    deps:
-      - deploy-gateway
-    cmds:
-      - kubectl apply -f ./2-gateway-api/app.yml
-    status:
-      - kubectl diff -f ./2-gateway-api/app.yml
-
-  clean-app:
-    cmds:
-      - kubectl delete -f ./2-gateway-api/app.yml
+      cmds:
+        - kubectl delete -f ./2-gateway-api/app.yml
 
   update-etc-hosts:
+    desc: update /etc/hosts with the IP of the load balancer and kind.local entry
     run: once
-    prompt: Do you want to update /etc/hosts ?
     deps:
-      - deploy-gateway
+      - create-gateway
+    interactive: true
+    prompt: Do you want to update /etc/hosts ?
+    preconditions:
+      - kubectl wait gateway/gateway -n {{.GATEWAY_NS}} --for jsonpath='{.status.addresses[0].value}' 
     cmds:
-      - kubectl wait gateway/gateway -n {{.GATEWAY_NS}} --for jsonpath='{.status.addresses[0].value}'
-      - echo {{.LOAD_BALANCER_IP}}
+      - echo "The load balancer IP is {{.LOAD_BALANCER_IP}}"
       - sudo -v
-      - echo "{{.LOAD_BALANCER_IP}}      kind.local" | sudo tee -a /etc/hosts
+      - echo "{{.LOAD_BALANCER_IP}}      kind.local argocd.local vela.local" | sudo tee -a /etc/hosts 
     status:
       - cat /etc/hosts | grep {{.LOAD_BALANCER_IP}}
     vars:
       LOAD_BALANCER_IP:
-        |
-        kubectl get gateway gateway -n {{.GATEWAY_NS}} | awk '{print $3}' | awk NR==2  # yamllint disable-line rule:line-length
+        sh: kubectl get gateway gateway -n {{.GATEWAY_NS}} -o jsonpath='{.status.addresses[0].value}'
 
   clean-etc-hosts:
     cmds:
       - sudo -v
       - sudo sed -i '' '/kind\.local/d' /etc/hosts
       - echo "Removed all lines containing 'kind.local' from /etc/hosts"
- 
+
+
+  get-argocd-password:
+    desc: get argocd password
+    run: once
+    deps:
+      - update-etc-hosts
+    preconditions:
+      - grep argocd.local /etc/hosts
+    cmds:
+      - kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 --decode
+
+  open-argocd-ui:
+    deps:
+      - get-argocd-password
+    desc: open argocd ui
+    run: once
+    preconditions:
+      - grep argocd.local /etc/hosts
+    cmds:
+      - open http://argocd.local
+
+
+  install-cert-manager:
+    desc: intall cert manager
+    deps:
+      - deploy-argocd
+    preconditions:
+      - kubectl wait deployment argocd-server --for=condition=available --timeout=60s -n argocd
+    cmds:
+      - kubectl apply -f 4-cert-manager/cert-manager-project.yml
+      - kubectl apply -f 4-cert-manager/cert-manager-app.yml
+  
+  install-metrics-server:
+    cmds:
+      - kubectl apply -f 5-metrics/metrics-server-helm.yml
+    
+  clean-metrics-server:
+    cmds:
+      - kubectl delete -f 5-metrics/metrics-server-helm.yml
+
+  install-monitoring:
+    deps:
+      - deploy-argocd
+    preconditions:
+      - kubectl wait deployment argocd-server --for=condition=available --timeout=60s -n argocd
+    cmds:
+      - kubectl apply -f 5-metrics/kube-state-metrics-project.yml
+      - kubectl apply -f 5-metrics/kube-state-metrics-app.yml
+      - kubectl apply -f 5-metrics/prometheus-project.yml
+      - kubectl apply -f 5-metrics/prometheus-app.yml  
+  
+  clean-monitoring:
+    cmds:
+      - kubectl delete -f 5-metrics/kube-state-metrics-project.yml
+      - kubectl delete -f 5-metrics/kube-state-metrics-app.yml
+      - kubectl delete -f 5-metrics/prometheus-project.yml
+      - kubectl delete -f 5-metrics/prometheus-app.yml 
+
+  install-otel:
+    desc: Install Otel Operator in the Observability namespace
+    deps:
+      - deploy-argocd
+    preconditions:
+      - kubectl wait deployment argocd-server --for=condition=available --timeout=60s -n argocd
+    cmds:
+      - kubectl apply -f 6-otel/otel-project.yml
+      - kubectl apply -f 6-otel/otel-app.yml
+
+  clean-otel:
+    desc: Install Otel Operator in the Observability namespace
+    cmds:
+      - kubectl delete -f 6-otel/otel-project.yml
+      - kubectl delete -f 6-otel/otel-app.yml
+
+  install-fluxcd:
+    deps:
+      - deploy-argocd
+    preconditions:
+      - kubectl wait deployment argocd-server --for=condition=available --timeout=60s -n argocd
+    cmds:
+      - kubectl apply -f 9-fluxcd/fluxcd-argocd.yml
+
+  clean-fluxcd:
+    cmds:
+      - kubectl delete -f 9-fluxcd/fluxcd-argocd.yml
+
+  # install-kgateway:
+  #   desc: Install Kgateway
+  #   cmds:
+  #     - |
+  #        helm upgrade -i kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds \
+  #           --create-namespace --namespace kgateway-system \
+  #           --version v2.1.2 
+  #     - |
+  #       helm upgrade -i kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
+  #         --namespace kgateway-system \
+  #         --version v2.1.2 \
+  #         --set controller.image.pullPolicy=Always
+
+
+  # create-kgateway-clas:
+  #   deps:
+  #     - install-kgateway
+  #   cmds:
+  #     - kubectl apply -f kgateway-class.yml
+  #   status:
+  #     - kubectl get gatewayclass kgateway -n kgateway-system
+      
+  create-kgateway-gateway:
+    deps:
+      - install-kgateway
+    cmds:
+      - kubectl apply -f kgateway-gateway.yml
+    status:
+      - kubectl get gateway kgateway -n kgateway-system
+
+
+  install-vela:
+    deps:
+      - deploy-argocd
+    preconditions:
+      - kubectl wait deployment argocd-server --for=condition=available --timeout=60s -n argocd
+    cmds:
+      - kubectl create namespace vela-system  || echo "namespace vela-system already exists"
+      - vela install
+    status:
+      - kubectl wait --for=condition=ready --timeout=120s pods -l app.kubernetes.io/name=vela-core -n vela-system
+
+  install-velaux:
+    deps:
+      - install-vela
+    preconditions:
+      - kubectl wait --for=condition=ready --timeout=120s pods -l app.kubernetes.io/name=vela-core -n vela-system
+    cmds:
+      - vela addon enable velaux
+    status:
+      - kubectl wait --for=condition=ready --timeout=120s pods -l app.oam.dev/name=addon-velaux -n vela-system
+    
+  install-vela-fluxcd:
+    deps:
+      - install-vela
+    preconditions:
+      - kubectl wait --for=condition=ready --timeout=120s pods -l app.kubernetes.io/name=vela-core -n vela-system
+    cmds:
+      - vela addon enable fluxcd
+  
+  install-vela-app:
+    deps:
+      - install-vela
+    preconditions:
+      - kubectl wait --for=condition=ready --timeout=120s pods -l app.kubernetes.io/name=vela-core -n vela-system
+    cmds:
+      - vela env init prod --namespace prod
+      - vela up -f ./8-kubevela/first-app.yml
+
+  clean-vela:
+    cmds:
+      - kubectl delete namespace vela-system
+
+  configure-vela-route:
+    deps:
+      - install-vela
+    cmds:
+      - kubectl apply -f 8-kubevela/vela-httproute.yml -n vela-system
+   
+  clean-vela-httproute:
+    cmds:
+      - kubectl delete -f 8-kubevela/vela-httproute.yml -n vela-system
+
+  configure-tls:
+    cmds:
+      - task: sync-context
+      - kubectl apply -f 7-tls/tls-setup.yaml
+      - kubectl wait --for=condition=Ready certificate/cluster-cert -n gateway --timeout=60s
+
+  install-sample-app:
+    run: once
+    deps:
+      - install-gateway
+    cmds:
+      - kubectl apply -f ./2-gateway-api/app.yml
+    status:
+      - kubectl wait deployment/http-echo-deployment -n app --for=condition=available --timeout=60s
+
+  clean-sample-app:
+    cmds:
+      - kubectl delete -f ./2-gateway-api/app.yml
+
   open-app:
     deps:
-      - deploy-app
+      - install-sample-app
       - update-etc-hosts
     cmds:
       - open http://kind.local
 
+
   clean:
     aliases: [delete]
-    ignore_error: true
-    cmds:
-      - task: clean-app
-      - task: clean_crds
-      - task: clean-gateway
-      - task: clean-cluster
-      - task: clean-lb
-     # - task: clean-etc-hosts
+    deps:
+      - clean-cluster
+      - clean-lb

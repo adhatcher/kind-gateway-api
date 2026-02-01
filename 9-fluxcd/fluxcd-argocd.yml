@@ -1,0 +1,47 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: flux-project
+  namespace: argocd
+spec:
+  description: Project for Flux2 OCI deployment
+  destinations:
+  - namespace: flux-system
+    server: https://kubernetes.default.svc
+  sourceRepos:
+  - 'ghcr.io/fluxcd-community/charts' # Remove the /* and use the base URL
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+---
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: flux2
+  namespace: argocd
+spec:
+  project: flux-project
+  source:
+    repoURL: ghcr.io/fluxcd-community/charts
+    chart: flux2
+    targetRevision: "2.13.0" # Always pin this to avoid unexpected breaking changes
+    helm:
+      values: |
+        # Ensure you enable the controllers you need
+        imageAutomationController:
+          create: true
+        imageReflectorController:
+          create: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: flux-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    - Replace=true  # Forces updates for resources that can't be patched
+    - SkipDryRunOnMissingResource=true

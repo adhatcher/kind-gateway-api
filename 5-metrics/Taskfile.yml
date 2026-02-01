@@ -1,0 +1,60 @@
+---
+version: '3'
+
+vars:
+  CLUSTER_NAME: gwkc-1
+  DEPENDENCIES:
+    - kind
+    - kubectl
+
+tasks:
+  check-cluster-running:
+    cmds:
+      - kind get clusters | grep {{.CLUSTER_NAME}}
+
+  default:
+    aliases: [all, make]
+    deps:
+      - check-dependencies
+      - deploy_prometheus
+
+  check-dependencies:
+    silent: true
+    cmds:
+      - |
+        {{range .DEPENDENCIES}}
+          if ! command -v {{.}} > /dev/null; then
+            echo "{{.}} not found"
+          fi
+        {{end}}
+
+  create_namespace:
+    run: once
+    deps:
+      - check-cluster-running
+    cmds:
+      - kubectl create namespace monitoring || echo "namespace monitoring already exists"
+    status:
+      - kubectl get namespace monitoring
+
+  clean_namespace:
+    cmds:
+      - kubectl delete namespace monitoring
+
+  deploy_prometheus:
+    deps:
+      - create_namespace
+    cmds:
+      - kubectl apply -f prometheus-project.yml
+      - kubectl apply -f prometheus-app.yml
+
+  clean_prometheus:
+    cmds:
+        - kubectl delete -f prometheus-project.yml
+        - kubectl delete -f prometheus-app.yml
+  
+
+  clean:
+    aliases: [delete, all]
+    cmds:
+      - clean_prometheus

@@ -20,7 +20,7 @@ tasks:
     aliases: [all, make]
     deps:
       - check-dependencies
-      - deploy-cluster
+      - create-cluster
       
   check-dependencies:
     silent: true
@@ -32,7 +32,7 @@ tasks:
           fi
         {{end}}
 
-  deploy-cluster:
+  create-cluster:
     run: once
     preconditions:
       - *check-docker-running
