@@ -11,7 +11,8 @@ spec:
     path: 8-kubevela
     targetRevision: HEAD
     directory:
-      recurse: true
+      include: velaux.yml
+      #recurse: true
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: vela-system
