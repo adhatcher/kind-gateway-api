@@ -9,7 +9,7 @@ spec:
       sectionName: http
       namespace: gateway
   hostnames:
-    - "vela.local"
+    - "vela.zeus"
   rules:
     - matches:
       - path:
