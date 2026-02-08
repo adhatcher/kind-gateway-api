@@ -7,7 +7,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: 'https://github.com/adhatcher'
+    repoURL: 'https://github.com/adhatcher/kind-gateway-api'
     path: 8-kubevela
     targetRevision: HEAD
     directory:
