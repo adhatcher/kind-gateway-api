@@ -1,0 +1,23 @@
+# File: argocd-velaux-app.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubevela-addons
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/adhatcher'
+    path: 8-kubevela
+    targetRevision: HEAD
+    directory:
+      recurse: true
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: vela-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,17 @@
+# File: 8-kubevela/velaux.yaml in github.com/adhatcher/kind-gateway-api
+apiVersion: core.oam.dev/v1beta1
+kind: Application
+metadata:
+  name: velaux-addon
+  namespace: vela-system
+  annotations:
+    # Prevents ArgoCD from trying to "fix" resources managed by KubeVela internally
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+spec:
+  components:
+    - name: velaux
+      type: addon
+      properties:
+        name: velaux
+        # Optional: Change to NodePort or LoadBalancer if needed
+        # serviceType: ClusterIP 
